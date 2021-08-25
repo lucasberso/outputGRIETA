@@ -100,6 +100,7 @@ class Read_Input_Excel():
 
         return(df_all)
 
+
     def Obtain_Crack_Length(self, dataframe_all):
         for k in range(0, len(dataframe_all)):
             atotal_list = []
@@ -128,6 +129,7 @@ class Read_Input_Excel():
             dataframe_all[k]['a total'] = atotal_list
         return(dataframe_all)
 
+
     def Plot_Crack_Length(self, dataframe_all):
         missions_list = ["SR", "MR", "LR", "ULR", "MIX"]
         legend_mat = []
@@ -147,6 +149,12 @@ class Read_Input_Excel():
         Fast_crack_growth_criterion = self.book["INPUTS"].cell(26, 2).value
         Crit_crack_length_cons = self.book["INPUTS"].cell(27, 2).value
 
+        row_FM = 25
+        row_NS = 26
+        row_FC = 27
+
+        Global_max_lengths = []
+        Global_min_lengths = []
         # Obtain the critical lengths on each of the methods
         if Fracture_Mechs_criterion == "KR curve":
             # Read KR curve
@@ -163,19 +171,51 @@ class Read_Input_Excel():
 
             KR_curve = np.array(KR_curve_list)
             Crit_Lengths_FM = self.KR_curve_calc(df_all, KR_curve)
+            (Max_length_FM, Min_length_FM) = self.Write_Critical_Lengths(row_FM, Crit_Lengths_FM, Crit_crack_length_cons)
+            if Min_length_FM != "":
+                Global_min_lengths.append(Min_length_FM)
 
+            if Max_length_FM != "":
+                Global_max_lengths.append(Min_length_FM)
 
         elif Fracture_Mechs_criterion == "Residual strength":
             Crit_Lengths_FM = self.Residual_Strength_calc(df_all)
-            print("hola")
-#
-        # if Net_sect_yield_criterion == "Yes":
-        #     Crit_Lengths_NSY = self.Net_Sec_Yield_calc()
-#
-        # if Fast_crack_growth_criterion != "No":
-        #     Crit_Lengths_CWC = self.Fast_Growth_Crack_calc(Fast_crack_growth_criterion)
+            (Max_length_FM, Min_length_FM) = self.Write_Critical_Lengths(row_FM, Crit_Lengths_FM,
+                                                                         Crit_crack_length_cons)
+            if Min_length_FM != "":
+                Global_min_lengths.append(Min_length_FM)
 
-        # Plot the critical crack lengths for each segment and in total with the conservatism method
+            if Max_length_FM != "":
+                Global_max_lengths.append(Min_length_FM)
+
+        if Net_sect_yield_criterion == "Yes":
+            A_total = self.book["INPUTS"].cell(29, 2).value
+            Fty = self.book["INPUTS"].cell(30, 2).value
+            Crit_Lengths_NSY = self.Net_Sec_Yield_calc(df_all, A_total, Fty)
+            (Max_length_NSY, Min_length_NSY) = self.Write_Critical_Lengths(row_NS, Crit_Lengths_NSY, Crit_crack_length_cons)
+
+            if Min_length_NSY != "":
+                Global_min_lengths.append(Min_length_NSY)
+
+            if Max_length_NSY != "":
+                Global_max_lengths.append(Min_length_NSY)
+
+        if Fast_crack_growth_criterion != "No":
+            Crit_Lengths_CWC = self.Fast_Growth_Crack_calc(Fast_crack_growth_criterion, df_all)
+            (Max_length_CWC, Min_length_CWC) = self.Write_Critical_Lengths(row_FC, Crit_Lengths_CWC, Crit_crack_length_cons)
+
+            if Min_length_CWC != "":
+                Global_min_lengths.append(Min_length_CWC)
+
+            if Max_length_CWC != "":
+                Global_max_lengths.append(Min_length_CWC)
+
+        if Crit_crack_length_cons == "Real":
+            self.book["INPUTS"].cell(25, 14).value = max(np.array(Global_max_lengths))
+        elif Crit_crack_length_cons == "Conservative":
+            self.book["INPUTS"].cell(25, 14).value = min(np.array(Global_min_lengths))
+
+        self.book.save(self.Excel_file)
 
 
     def KR_curve_calc(self, df_all, KR_curve):
@@ -236,8 +276,7 @@ class Read_Input_Excel():
                 tang_mat.append(tang_point)
             else:
                 tang_mat.append("")
-        return(tang_mat)
-
+        return tang_mat
 
 
     def Residual_Strength_calc(self,df_all):
@@ -245,7 +284,6 @@ class Read_Input_Excel():
         for k in range(0, len(df_all)):
             if len(df_all[k] > 0):
                 crit_len = "No"
-                sig_lim = []
                 res_strength = []
                 for i in range(0, len(df_all[0])):
                     if df_all[k]["Klim ab"][i] < df_all[k]["Klim cd"][i] and df_all[k]["Klim ab"][i] != 0:
@@ -271,21 +309,88 @@ class Read_Input_Excel():
                     #        df_all[k]["Klim ab"][i] / np.sqrt(np.pi * df_all[k]["Crack a"][i]) / df_all[k]["Beta b"][i])
 
 
-                    sig_lim.append(self.limit_stress)
+
                     if res_strength[i] < self.limit_stress:
                         crit_lengths.append(df_all[k]["Crack a"][i])
                         crit_len = "Yes"
                         break
-
                 if crit_len == "No":
                     crit_lengths.append("")
             else:
                 crit_lengths.append("")
-        return(crit_lengths)
+        return crit_lengths
 
-"""
-    def Net_Sec_Yield_calc(self):
 
-    def Fast_Growth_Crack_calc(self, Method):
-    
-"""
+    def Net_Sec_Yield_calc(self,df_all, A_total, Fty):
+        crit_lengths = []
+        Thickness = A_total / df_all[0]["Crack a"][len(df_all[0]["Crack a"]) - 1]
+        for k in range(0, len(df_all)):
+            if len(df_all[k] > 0):
+                sig_residual = []
+                sig_lim = []
+                Crit_found = "No"
+                for i in range(0, len(df_all[k])):
+                    A_remaining = A_total - df_all[k]["a total"][i] * Thickness
+                    sig_residual.append(Fty * A_remaining / A_total)
+                    if sig_residual[i] < self.limit_stress:
+                        a_critical = df_all[k]["Crack a"][i - 1] + (df_all[k]["Crack a"][i] - df_all[k]["Crack a"][i - 1])/(sig_residual[i] - sig_residual[i - 1]) * (self.limit_stress - sig_residual[i - 1])
+                        crit_lengths.append(a_critical)
+                        Crit_found = "Yes"
+                        break
+                if Crit_found == "No":
+                    crit_lengths.append("")
+            else:
+                crit_lengths.append("")
+        return crit_lengths
+
+
+    def Fast_Growth_Crack_calc(self, Method, df_all):
+        crit_lengths = []
+        for k in range(0, len(df_all)):
+            if len(df_all[k] > 0):
+                crack_growth = []
+                Crit_found = "No"
+                for i in range(0, len(df_all[k]) - 1):
+                    if Method == "1 mm/flight":
+                        if (df_all[k]["Flights"][i + 1] - df_all[k]["Flights"][i]) == 0:
+                            crack_growth.append(0)
+                        else:
+                            crack_growth.append((df_all[k]["Crack a"][i + 1] - df_all[k]["Crack a"][i])/(df_all[k]["Flights"][i + 1] - df_all[k]["Flights"][i]))
+                    elif Method == "1 mm/cycle":
+                        if (df_all[k]["Flights"][i + 1] - df_all[k]["Flights"][i]) == 0:
+                            crack_growth.append(0)
+                        else:
+                            crack_growth.append((df_all[k]["Crack a"][i + 1] - df_all[k]["Crack a"][i]) / (df_all[k]["Cycles"][i + 1] - df_all[k]["Cycles"][i]))
+
+                    if crack_growth[i] > 1:
+                        crit_lengths.append(df_all[k]["Crack a"][i])
+                        Crit_found = "Yes"
+                        break
+                if Crit_found == "No":
+                    crit_lengths.append("")
+            else:
+                crit_lengths.append("")
+        return crit_lengths
+
+
+    def Write_Critical_Lengths(self, row, crit_lengths, Crit_crack_length_cons):
+        col = 8
+        for i in range(0, len(crit_lengths)):
+            self.book["INPUTS"].cell(row, col).value = crit_lengths[i]
+            col = col + 1
+
+        Min_length = crit_lengths[0]
+        Max_length = crit_lengths[0]
+        for i in range(1, len(crit_lengths)):
+            if crit_lengths[i] != "":
+                if crit_lengths[i] > Max_length:
+                    Max_length = crit_lengths[i]
+                elif crit_lengths[i] < Min_length:
+                    Min_length = crit_lengths[i]
+
+        if Crit_crack_length_cons == "Real":
+            self.book["INPUTS"].cell(row, 13).value = Max_length
+        elif Crit_crack_length_cons == "Conservative":
+            self.book["INPUTS"].cell(row, 13).value = Min_length
+
+        return Max_length, Min_length

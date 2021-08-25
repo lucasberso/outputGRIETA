@@ -46,7 +46,7 @@ if __name__ == '__main__':
 
 
     # Script para comprobar los datos obetidos por la librería joint1dISAMI.
-    Input_Excel = r"C:\Users\javier.vela\Documents\Automatización\GRIETA\Plantilla_GRIETA_23_08_2021.xlsm"
+    Input_Excel = r"C:\Users\javier.vela\Documents\Automatización\GRIETA\Plantilla_PRUEBA.xlsx"
     Data_Folder = r"C:\Users\javier.vela\Documents\Automatización\GRIETA\Ejemplo"
     Coding = Read_Input_Excel(Input_Excel, Data_Folder)
     df_all = Coding.Read_files()
