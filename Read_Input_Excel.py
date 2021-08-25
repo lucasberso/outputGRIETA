@@ -1,4 +1,5 @@
 import os
+from typing import List, Any
 
 import numpy as np
 from path import Path
@@ -156,30 +157,17 @@ class Read_Input_Excel():
             while self.book["INPUTS"].cell(row, col).value != None:
                 KR_curve_list.append([])
                 KR_curve_list[cont].append(self.book["INPUTS"].cell(row, col).value)
-                KR_curve_list[cont].append(self.book["INPUTS"].cell(row, col + 1).value * 0.3)
+                KR_curve_list[cont].append(self.book["INPUTS"].cell(row, col + 1).value)
                 row = row + 1
                 cont = cont + 1
 
             KR_curve = np.array(KR_curve_list)
-
-            plt.plot(KR_curve[:, 0], KR_curve[:, 1])
-            plt.plot(df_all[0]["Crack a"], df_all[0]["Klim ab"])
-            plt.plot(df_all[1]["Crack a"], df_all[1]["Klim ab"])
-            plt.plot(df_all[2]["Crack a"], df_all[2]["Klim ab"])
-            plt.plot(df_all[4]["Crack a"], df_all[4]["Klim ab"])
-            plt.show()
-
             Crit_Lengths_FM = self.KR_curve_calc(df_all, KR_curve)
-            plt.plot(KR_curve[:, 0], KR_curve[:, 1])
-            plt.plot(df_all[0]["Crack a"], df_all[0]["Klim ab"])
-            plt.plot(df_all[1]["Crack a"], df_all[1]["Klim ab"])
-            plt.plot(df_all[2]["Crack a"], df_all[2]["Klim ab"])
-            plt.plot(df_all[4]["Crack a"], df_all[4]["Klim ab"])
-            plt.show()
-            print("hola")
 
-        # elif Fracture_Mechs_criterion == "Residual strength":
-        #     Crit_Lengths_FM = self.Residual_Strength_calc()
+
+        elif Fracture_Mechs_criterion == "Residual strength":
+            Crit_Lengths_FM = self.Residual_Strength_calc(df_all)
+            print("hola")
 #
         # if Net_sect_yield_criterion == "Yes":
         #     Crit_Lengths_NSY = self.Net_Sec_Yield_calc()
@@ -191,7 +179,26 @@ class Read_Input_Excel():
 
 
     def KR_curve_calc(self, df_all, KR_curve):
-        perc_tol = 0.05
+        des_inc = 5 # Minimum interval between two points of the R curve
+        KR_curve_comp = []
+        KR_curve_comp.append([])
+        KR_curve_comp.append([])
+        KR_curve_comp[0].append(KR_curve[0,0])
+        KR_curve_comp[1].append(KR_curve[0,1])
+        for i in range(1, len(KR_curve)):
+            if KR_curve[i, 0] - KR_curve[i - 1, 0] <= des_inc:
+                KR_curve_comp[0].append(KR_curve[i, 0])
+                KR_curve_comp[1].append(KR_curve[i, 1])
+            else:
+                increments = round((KR_curve[i, 0] - KR_curve[i - 1, 0]) / des_inc)
+                for j in range(0, increments):
+                    a_int = KR_curve[i - 1, 0] + des_inc * (j + 1)
+                    K_int = KR_curve[i - 1, 1] + (KR_curve[i, 1] - KR_curve[i - 1, 1])/(KR_curve[i, 0] - KR_curve[i - 1, 0]) * (a_int - KR_curve[i - 1, 0])
+                    KR_curve_comp[0].append(a_int)
+                    KR_curve_comp[1].append(K_int)
+        KR_curve_comp = np.array(KR_curve_comp)
+
+        perc_tol = 0.03
         tang_mat = []
         for k in range(0, len(df_all)):
             a_0 = 0
@@ -200,9 +207,9 @@ class Read_Input_Excel():
             Limit_Reach = "No"
             if len(df_all[k] > 0):
                 while Tangent_Point == "No" and Limit_Reach == "No":
-                    for i in range(1, KR_curve.shape[0]):
-                        K_curve = KR_curve[i,1]
-                        a_curve = KR_curve[i,0] + a_0
+                    for i in range(1, KR_curve_comp.shape[1]):
+                        K_curve = KR_curve_comp[1, i]
+                        a_curve = KR_curve_comp[0, i] + a_0
                         K_actual = 0
                         for j in range(0, len(df_all[k]["Crack a"]) - 1):
                             if a_curve > df_all[k]["Crack a"][j] and a_curve < df_all[k]["Crack a"][j + 1]:
@@ -212,17 +219,16 @@ class Read_Input_Excel():
                         if K_actual > K_curve * (1 - perc_tol) and K_actual < K_curve * (1 + perc_tol):
                             if Tangent_Point == "Yes": # THIS MEANS THAT TWO TANGENT POINTS HAS BEEN FOUNDED WHICH CAN BE AN ERROR DUE TO THE TOLERANCE
                                 Tangent_Point = "No"
+                                break
                             else:
-                                tang_point = a_curve
+                                tang_point = a_0
                                 Tangent_Point = "Yes"
 
-                        elif K_curve > K_actual:
+                        elif K_curve > K_actual and K_actual != 0:
                             Tangent_Point = "No"
                             break
 
                     a_0 = a_0 + 1
-                    if a_0 == 104:
-                        Tangent_Point = "No"
                     if a_0 > df_all[0]["Crack a"][len(df_all[0]["Crack a"]) - 1]:
                         Limit_Reach = "Yes"
                 if Tangent_Point == "No":
@@ -233,9 +239,51 @@ class Read_Input_Excel():
         return(tang_mat)
 
 
-"""
-    def Residual_Strength_calc(self):
 
+    def Residual_Strength_calc(self,df_all):
+        crit_lengths = []
+        for k in range(0, len(df_all)):
+            if len(df_all[k] > 0):
+                crit_len = "No"
+                sig_lim = []
+                res_strength = []
+                for i in range(0, len(df_all[0])):
+                    if df_all[k]["Klim ab"][i] < df_all[k]["Klim cd"][i] and df_all[k]["Klim ab"][i] != 0:
+                        res_strength.append(df_all[k]["Klim ab"][i])
+                    elif df_all[k]["Klim cd"][i] < df_all[k]["Klim ab"][i] and df_all[k]["Klim cd"][i] != 0:
+                        res_strength.append(df_all[k]["Klim cd"][i])
+                    elif df_all[k]["Klim cd"][i] == 0:
+                        res_strength.append(df_all[k]["Klim ab"][i])
+                    elif df_all[k]["Klim ab"][i] == 0:
+                        res_strength.append(df_all[k]["Klim cd"][i])
+
+                    #if df_all[k]["Beta a"][i] < df_all[k]["Beta b"][i] and df_all[k]["Beta a"][i] != 0:
+                    #    res_strength.append(
+                    #        df_all[k]["Klim ab"][i] / np.sqrt(np.pi * df_all[k]["Crack a"][i]) / df_all[k]["Beta a"][i])
+                    #elif df_all[k]["Beta b"][i] < df_all[k]["Beta a"][i] and df_all[k]["Beta b"][i] != 0:
+                    #    res_strength.append(
+                    #        df_all[k]["Klim ab"][i] / np.sqrt(np.pi * df_all[k]["Crack a"][i]) / df_all[k]["Beta b"][i])
+                    #elif df_all[k]["Beta b"][i] == 0:
+                    #    res_strength.append(
+                    #        df_all[k]["Klim ab"][i] / np.sqrt(np.pi * df_all[k]["Crack a"][i]) / df_all[k]["Beta a"][i])
+                    #elif df_all[k]["Beta a"][i] == 0:
+                    #    res_strength.append(
+                    #        df_all[k]["Klim ab"][i] / np.sqrt(np.pi * df_all[k]["Crack a"][i]) / df_all[k]["Beta b"][i])
+
+
+                    sig_lim.append(self.limit_stress)
+                    if res_strength[i] < self.limit_stress:
+                        crit_lengths.append(df_all[k]["Crack a"][i])
+                        crit_len = "Yes"
+                        break
+
+                if crit_len == "No":
+                    crit_lengths.append("")
+            else:
+                crit_lengths.append("")
+        return(crit_lengths)
+
+"""
     def Net_Sec_Yield_calc(self):
 
     def Fast_Growth_Crack_calc(self, Method):
