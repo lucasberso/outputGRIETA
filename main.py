@@ -3,7 +3,7 @@
 from path import Path
 import pandas as pd
 from matplotlib import pyplot as plt
-from Read_Input_Excel import Read_Input_Excel
+from GRIETA_Lengths import GRIETA_Critical_Lengths
 
 testcases_dir = Path(__file__).dirname()
 
@@ -48,11 +48,13 @@ if __name__ == '__main__':
     # Script para comprobar los datos obetidos por la librería joint1dISAMI.
     Input_Excel = r"C:\Users\javier.vela\Documents\Automatización\GRIETA\Plantilla_PRUEBA.xlsx"
     Data_Folder = r"C:\Users\javier.vela\Documents\Automatización\GRIETA\Ejemplo"
-    Coding = Read_Input_Excel(Input_Excel, Data_Folder)
+    out_folder = r"C:\Users\javier.vela\Documents\Automatización\GRIETA"
+    out_name = "TXT_OUTPUT"
+    Coding = GRIETA_Critical_Lengths(Input_Excel, Data_Folder)
     df_all = Coding.Read_files()
     df_all = Coding.Obtain_Crack_Length(df_all)
     # Coding.Plot_Crack_Length(df_all)
-    Coding.Compute_Critical_Crack_Lengths(df_all)
+    Coding.Compute_Critical_Crack_Lengths(df_all, out_folder, out_name)
 
 #    filename = 'grieta_F1802-3-lr_1.num'  # Nombre del archivo Excel con los datos de entrada.
 #    input_file = testcases_dir + "/" + filename

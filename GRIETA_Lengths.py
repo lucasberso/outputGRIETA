@@ -1,14 +1,23 @@
+#
+# Authors:
+# Lucas Bernacer Soriano,
+# Javier Vela
+#
+# Copyright (c) 2021, Capgemini Engineering
+#
+
+
 import os
 from typing import List, Any
-
 import numpy as np
 from path import Path
 import pandas as pd
 from matplotlib import pyplot as plt
 from openpyxl import load_workbook
 from wrappers import read_table_horiz
+from prettytable import PrettyTable
 
-class Read_Input_Excel():
+class GRIETA_Critical_Lengths():
     """
     Clase creada para leer el input del archivo Excel
     """
@@ -143,7 +152,7 @@ class Read_Input_Excel():
         plt.show()
 
 
-    def Compute_Critical_Crack_Lengths(self, df_all):
+    def Compute_Critical_Crack_Lengths(self, df_all, output_folder, txt_name):
         Fracture_Mechs_criterion = self.book["INPUTS"].cell(24,2).value
         Net_sect_yield_criterion = self.book["INPUTS"].cell(25, 2).value
         Fast_crack_growth_criterion = self.book["INPUTS"].cell(26, 2).value
@@ -153,8 +162,15 @@ class Read_Input_Excel():
         row_NS = 26
         row_FC = 27
 
+        # Clean the results cells in case there are values
+        for row in range(row_FM, row_FC + 1):
+            for col in range(8, 14):
+                self.book["INPUTS"].cell(row, col).value = ""
+        self.book["INPUTS"].cell(row_FM, 14).value = ""
+
         Global_max_lengths = []
         Global_min_lengths = []
+        All_Crit_Lengths = []
         # Obtain the critical lengths on each of the methods
         if Fracture_Mechs_criterion == "KR curve":
             # Read KR curve
@@ -171,6 +187,7 @@ class Read_Input_Excel():
 
             KR_curve = np.array(KR_curve_list)
             Crit_Lengths_FM = self.KR_curve_calc(df_all, KR_curve)
+            All_Crit_Lengths.append(Crit_Lengths_FM)
             (Max_length_FM, Min_length_FM) = self.Write_Critical_Lengths(row_FM, Crit_Lengths_FM, Crit_crack_length_cons)
             if Min_length_FM != "":
                 Global_min_lengths.append(Min_length_FM)
@@ -180,28 +197,45 @@ class Read_Input_Excel():
 
         elif Fracture_Mechs_criterion == "Residual strength":
             Crit_Lengths_FM = self.Residual_Strength_calc(df_all)
+            All_Crit_Lengths.append(Crit_Lengths_FM)
             (Max_length_FM, Min_length_FM) = self.Write_Critical_Lengths(row_FM, Crit_Lengths_FM,
                                                                          Crit_crack_length_cons)
             if Min_length_FM != "":
                 Global_min_lengths.append(Min_length_FM)
 
+
             if Max_length_FM != "":
                 Global_max_lengths.append(Min_length_FM)
+
+        else:
+            All_Crit_Lengths.append([])
+            for i in range(0, 5):
+                All_Crit_Lengths[0].append("")
 
         if Net_sect_yield_criterion == "Yes":
             A_total = self.book["INPUTS"].cell(29, 2).value
             Fty = self.book["INPUTS"].cell(30, 2).value
             Crit_Lengths_NSY = self.Net_Sec_Yield_calc(df_all, A_total, Fty)
+            All_Crit_Lengths.append(Crit_Lengths_NSY)
             (Max_length_NSY, Min_length_NSY) = self.Write_Critical_Lengths(row_NS, Crit_Lengths_NSY, Crit_crack_length_cons)
 
             if Min_length_NSY != "":
                 Global_min_lengths.append(Min_length_NSY)
 
+
             if Max_length_NSY != "":
                 Global_max_lengths.append(Min_length_NSY)
 
+        else:
+            All_Crit_Lengths.append([])
+            for i in range(0, 5):
+                All_Crit_Lengths[1].append("")
+            Global_min_lengths.append("")
+            Global_max_lengths.append("")
+
         if Fast_crack_growth_criterion != "No":
             Crit_Lengths_CWC = self.Fast_Growth_Crack_calc(Fast_crack_growth_criterion, df_all)
+            All_Crit_Lengths.append(Crit_Lengths_CWC)
             (Max_length_CWC, Min_length_CWC) = self.Write_Critical_Lengths(row_FC, Crit_Lengths_CWC, Crit_crack_length_cons)
 
             if Min_length_CWC != "":
@@ -209,13 +243,32 @@ class Read_Input_Excel():
 
             if Max_length_CWC != "":
                 Global_max_lengths.append(Min_length_CWC)
+        else:
+            All_Crit_Lengths.append([])
+            for i in range(0, 5):
+                All_Crit_Lengths[2].append("")
+
+        Max_length = Global_max_lengths[0]
+        Min_length = Global_min_lengths[0]
+        for i in range(1, len(Global_max_lengths)):
+            if Global_max_lengths[i] != "":
+                if Global_max_lengths[i] > Max_length:
+                    Max_length = Global_max_lengths[i]
+            if Global_min_lengths[i] != "":
+                if Global_min_lengths[i] < Min_length:
+                    Min_length = Global_min_lengths[i]
 
         if Crit_crack_length_cons == "Real":
-            self.book["INPUTS"].cell(25, 14).value = max(np.array(Global_max_lengths))
+            self.book["INPUTS"].cell(25, 14).value = Max_length
         elif Crit_crack_length_cons == "Conservative":
-            self.book["INPUTS"].cell(25, 14).value = min(np.array(Global_min_lengths))
+            self.book["INPUTS"].cell(25, 14).value = Min_length
 
         self.book.save(self.Excel_file)
+
+        self.Write_Critical_Lengths_txt(output_folder, txt_name, All_Crit_Lengths, Global_max_lengths,
+                                        Global_min_lengths, Crit_crack_length_cons)
+
+
 
 
     def KR_curve_calc(self, df_all, KR_curve):
@@ -314,6 +367,8 @@ class Read_Input_Excel():
                         crit_lengths.append(df_all[k]["Crack a"][i])
                         crit_len = "Yes"
                         break
+                #plt.plot(df_all[k]["Crack a"], res_strength)
+                #plt.show()
                 if crit_len == "No":
                     crit_lengths.append("")
             else:
@@ -394,3 +449,60 @@ class Read_Input_Excel():
             self.book["INPUTS"].cell(row, 13).value = Min_length
 
         return Max_length, Min_length
+
+
+    def Write_Critical_Lengths_txt(self, output_folder, filename, All_Crit_Lengths, Global_max_lengths, Global_min_lengths, Crit_crack_length_cons):
+        output_file = output_folder + "/" + filename
+        if os.path.isfile(output_file + '.txt'):  # Creación del archivo txt de salida.
+            os.remove(output_file + '.txt')
+        file = open(output_file + '.txt', "x")
+        file.writelines("##################################\n") # Encabezado del archivo de entrada a ISAMI.
+        file.writelines("#      GRIETA VERSION x.x        #\n")
+        file.writelines("#  GRIETA_READER VERSION: v1.0   #\n")
+        file.writelines("##################################\n")
+        file.writelines("\n")
+        file.writelines("\n")
+        file.writelines("CRITICAL LENGTHS RESULTS:\n")
+        file.writelines("\n")
+        Lengths_Table = PrettyTable()
+        field_names = ["", "SR", "MR", "LR", "ULR", "MIX", "Lcrit (mm)", "Lcrit global (mm)"]
+        headers = ["Fracture Mechanics", "Net Section Yield", "Fast Crack Growth"]
+        # Lengths_Table.header = headers
+        Lengths_Table.field_names = field_names
+
+        Max_length = Global_max_lengths[0]
+        Min_length = Global_min_lengths[0]
+        for i in range(1, len(Global_max_lengths)):
+            if Global_max_lengths[i] != "":
+                if Global_max_lengths[i] > Max_length:
+                    Max_length = Global_max_lengths[i]
+            if Global_min_lengths[i] != "":
+                if Global_min_lengths[i] < Min_length:
+                    Min_length = Global_min_lengths[i]
+
+        row_lines = []
+        for i in range(0, len(All_Crit_Lengths)):
+            row_lines.append([])
+            row_lines[i].append(headers[i])
+            for j in range(0, len(All_Crit_Lengths[i])):
+                row_lines[i].append(All_Crit_Lengths[i][j])
+
+            if Crit_crack_length_cons == "Real":
+                row_lines[i].append(Global_max_lengths[i])
+                if i == 1:
+                    row_lines[i].append(Max_length)
+                else:
+                    row_lines[i].append("")
+            elif Crit_crack_length_cons == "Conservative":
+                row_lines[i].append(Global_min_lengths[i])
+                if i == 1:
+                    row_lines[i].append(Min_length)
+                else:
+                    row_lines[i].append("")
+
+        Lengths_Table.add_rows(row_lines)
+        file.write(str(Lengths_Table))
+        file.writelines("\n")
+        file.close()
+
+
