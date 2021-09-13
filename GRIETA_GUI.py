@@ -119,7 +119,7 @@ class run_GUI():
                     GRIETA.Compute_Critical_Crack_Lengths(df_all = DATA, output_folder = dir_path, txt_name = output_name)
                     self.write_in_txt("The files have been read and the txt has been filled", self.output_print)
                 except:
-                    self.write_in_txt("Error: ISAMI input file not compatible.", self.output_print)
+                    self.write_in_txt("Error: Mistake in the input information.", self.output_print)
 
             #elif self.case.get() == 2:
             #    try:
