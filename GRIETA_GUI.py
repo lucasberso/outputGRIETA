@@ -139,7 +139,7 @@ class run_GUI():
     def open_help(self):
         # FUNCIÓN PARA ABRIR EL DOCUMENTO DE AYUDA
         try:
-            os.system("Joint1DISAMI_Help.pdf")
+            os.system("GRIETA_Help.pdf")
         except:
             self.write_in_txt("Error: Couldn't open the README file.", self.output_print)
 

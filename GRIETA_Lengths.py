@@ -382,6 +382,7 @@ class GRIETA_Critical_Lengths():
                     if a_0 > df_all[0]["Crack a"][len(df_all[0]["Crack a"]) - 1]:
                         # Límite que se alcanza cuando a_0 es mayor que el máximo longitud de grieta obtenido
                         Limit_Reach = "Yes"
+                        self.book["INPUTS"].cell(6, 25).value = "R-Curve tangent point found on final point"
                 if Tangent_Point == "No":
                     # Si no ha habido punto de tangencia se hace la tangencia al final de la curva de los datos
                     tang_point = df_all[0]["Crack a"][len(df_all[0]["Crack a"]) - 1]
